@@ -173,6 +173,7 @@ trap 'rm -f "$GIT_DIR/$PFX-$SFX_MARKS.old" "$GIT_DIR/$PFX-$SFX_MARKS.tmp"' 0
 
 _err1=
 _err2=
+rm -f backflow && mkfifo backflow
 exec 3>&1
 { read -r _err1 || :; read -r _err2 || :; } <<-EOT
 $(
@@ -190,7 +191,7 @@ $(
   } | \
   {
     _e2=0
-    git fast-import $GFI_OPTS --export-marks="$GIT_DIR/$PFX-$SFX_MARKS.tmp" 3>&- || _e2=$?
+    git fast-import $GFI_OPTS --cat-blob-fd=4 --export-marks="$GIT_DIR/$PFX-$SFX_MARKS.tmp" 3>&- 4>backflow || _e2=$?
     echo $_e2 >&3
   }
 )

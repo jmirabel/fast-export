@@ -13,6 +13,8 @@ import sys
 import os
 import pluginloader
 
+from internal import rev_number_to_git_hash, rev_hash_to_git_hash
+
 if sys.platform == "win32":
   # On Windows, sys.stdout is initially opened in text mode, which means that
   # when a LF (\n) character is written to sys.stdout, it will be converted
@@ -30,6 +32,8 @@ cfg_export_boundary=1000
 
 subrepo_cache={}
 submodule_mappings=None
+
+cat_blob_fd = None
 
 def gitmode(flags):
   return 'l' in flags and '120000' or 'x' in flags and '100755' or '100644'
@@ -322,7 +326,19 @@ def export_commit(ui,repo,revision,old_marks,max,count,authors,
   export_file_contents(ctx,man,changed,hgtags,fn_encoding,plugins)
   wr()
 
-  return checkpoint(count)
+  result = checkpoint(count)
+
+  # Ask for the git hash of the last commit
+  wr('get-mark :%d' % (revision+1))
+  sys.stdout.flush()
+
+  # Read the hash of the last commit
+  git_hash = cat_blob_fd.readline()
+
+  rev_number_to_git_hash[str(revision)] = git_hash
+  rev_hash_to_git_hash[ctx.hex()] = git_hash
+
+  return result
 
 def export_note(ui,repo,revision,count,authors,encoding,is_first):
   (revnode,_,user,(time,timezone),_,_,_,_)=get_changeset(ui,repo,revision,authors,encoding)
@@ -646,6 +662,8 @@ if __name__=='__main__':
       plugins_dict['file_data_filters'].append(plugin.file_data_filter)
     if hasattr(plugin, 'commit_message_filter') and callable(plugin.commit_message_filter):
       plugins_dict['commit_message_filters'].append(plugin.commit_message_filter)
+  # This file is a unix FIFO that allows git fast-import to communicate with this script.
+  cat_blob_fd = open ("backflow", 'r')
 
   sys.exit(hg2git(options.repourl,m,options.marksfile,options.mappingfile,
                   options.headsfile, options.statusfile,
