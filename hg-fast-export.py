@@ -34,6 +34,7 @@ subrepo_cache={}
 submodule_mappings=None
 
 cat_blob_fd = None
+hg2git_map = None
 
 def gitmode(flags):
   return 'l' in flags and '120000' or 'x' in flags and '100755' or '100644'
@@ -46,6 +47,10 @@ def wr(msg=''):
   wr_no_nl(msg)
   sys.stdout.write('\n')
   #map(lambda x: sys.stderr.write('\t[%s]\n' % x),msg.split('\n'))
+
+def write_hg2git_map(hg_rev, hg_hash, git_hash):
+    if hg2git_map is not None:
+        hg2git_map.write ("%s %s %s" % (hg_rev, hg_hash, git_hash))
 
 def checkpoint(count):
   count=count+1
@@ -338,6 +343,8 @@ def export_commit(ui,repo,revision,old_marks,max,count,authors,
   rev_number_to_git_hash[str(revision)] = git_hash
   rev_hash_to_git_hash[ctx.hex()] = git_hash
 
+  write_hg2git_map (str(revision), ctx.hex(), git_hash)
+
   return result
 
 def export_note(ui,repo,revision,count,authors,encoding,is_first):
@@ -592,6 +599,8 @@ if __name__=='__main__':
       help="Add a plugin with the given init string <name=init>")
   parser.add_option("--subrepo-map", type="string", dest="subrepo_map",
       help="Provide a mapping file between the subrepository name and the submodule name")
+  parser.add_option("--hg2git-map", type="string", dest="hg2git_map",
+      help="Provide a mapping file between the hg revision numbers, hg hashes and git hashes.")
 
   (options,args)=parser.parse_args()
 
@@ -665,9 +674,16 @@ if __name__=='__main__':
   # This file is a unix FIFO that allows git fast-import to communicate with this script.
   cat_blob_fd = open ("backflow", 'r')
 
-  sys.exit(hg2git(options.repourl,m,options.marksfile,options.mappingfile,
+  if options.hg2git_map!=None:
+      hg2git_map = open (options.hg2git_map, 'w')
+
+  exit_value = hg2git(options.repourl,m,options.marksfile,options.mappingfile,
                   options.headsfile, options.statusfile,
                   authors=a,branchesmap=b,tagsmap=t,
                   sob=options.sob,force=options.force,hgtags=options.hgtags,
                   notes=options.notes,encoding=encoding,fn_encoding=fn_encoding,
-                  plugins=plugins_dict))
+                  plugins=plugins_dict)
+  if hg2git_map!=None:
+      hg2git_map.close()
+  cat_blob_fd.close()
+  sys.exit(exit_value)
